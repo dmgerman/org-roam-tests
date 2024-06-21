@@ -176,6 +176,21 @@ dmg-org-roam-node-read--completions
 | [(#("           #p_einit                       org configuration for emacs              /links/.emacs.d/dmg-org.org" 0 110 (node #s(org-roam-node "/Users/dmg/tmDropbox/org/roam/links/.emacs.d/dmg-org.org" "org configuration for emacs" nil (26228 28472 616572 535000) (26227 52771 117332 505000) "id-20240601-132534" 0 1 nil nil nil nil "org configuration for emacs" (("CATEGORY" . "") ("TRIGGER" . "org-gtd-next-project-action org-gtd-update-project-task!") ("ID" . "id-20240601-132534") ("BLOCKED" . "") ("ALLTAGS" . #(":p_einit:" 1 8 (inherited t))) ("FILE" . "/Users/dmg/tmDropbox/org/roam/links/.emacs.d/dmg-org.org") ("PRIORITY" . "B")) nil ("p_einit") nil nil))) . #s(org-roam-node "/Users/dmg/tmDropbox/org/roam/links/.emacs.d/dmg-org.org" "org configuration for emacs" nil (26228 28472 616572 535000) (26227 52771 117332 505000) "id-20240601-132534" 0 1 nil nil nil nil "org configuration for emacs" (("CATEGORY" . "") ("TRIGGER" . "org-gtd-next-project-action org-gtd-update-project-task!") ("ID" . "id-20240601-132534") ("BLOCKED" . "") ("ALLTAGS" . #(":p_einit:" 1 8 (inherited t))) ("FILE" . "/Users/dmg/tmDropbox/org/roam/links/.emacs.d/dmg-org.org") ("PRIORITY" . "B")) nil ("p_einit") nil nil))]                                                                                                                                                                                                                                      |
 
 
+* replacing org-roam-node-read-sort-by-file-mtime
+this should reduce time
+
+#+begin_src emacs-lisp   :exports both
+(defun org-roam-node-read-sort-by-file-mtime (a b)
+  "Sort files such that files modified more recently are shown first.
+COMPLETION-A and COMPLETION-B are items in the form of
+\(node-title org-roam-node-struct)"
+  (time-less-p (org-roam-node-file-mtime (car b))
+               (org-roam-node-file-mtime (car a))))
+#+end_src
+
+
+
+
 
 * Benchmarking original code
 
@@ -234,3 +249,127 @@ dmg-org-roam-node-read--completions
 |            0.088008 | 0 |                 0.0 |
 
 
+
+* replacing org-roam-node-read-sort-by-file-mtime
+this should reduce the garbage collection a tiny bit
+
+#+begin_src emacs-lisp   :exports both
+(defun org-roam-node-read-sort-by-file-mtime (a b)
+  "Sort files such that files modified more recently are shown first.
+COMPLETION-A and COMPLETION-B are items in the form of
+\(node-title org-roam-node-struct)"
+  (time-less-p (org-roam-node-file-mtime (cdr b))
+               (org-roam-node-file-mtime (cdr a))))
+#+end_src
+
+#+RESULTS:
+#+begin_example
+org-roam-node-read-sort-by-file-mtime
+#+end_example
+
+#+begin_src emacs-lisp   :exports both
+(setq dmg-org-roam-node-display-template 'dmg-org-roam-format-template)
+
+(cl-loop
+ for i from 1 to 10
+ collect (benchmark-run 1
+            (dmg-org-roam-node-read--completions)
+           ))
+#+end_src
+
+#+RESULTS:
+|            0.102163 | 0 |                0.0 |
+|            0.084623 | 0 |                0.0 |
+|            0.084103 | 0 |                0.0 |
+| 0.27418000000000003 | 1 | 0.1910389999999964 |
+|            0.082698 | 0 |                0.0 |
+|            0.081804 | 0 |                0.0 |
+|            0.082458 | 0 |                0.0 |
+|            0.083068 | 0 |                0.0 |
+|            0.083246 | 0 |                0.0 |
+|             0.08399 | 0 |                0.0 |
+
+
+* moving the sort before the formatting
+
+this does nothing
+
+#+begin_src emacs-lisp   :exports both
+(defun org-roam-node-read-sort-by-file-mtime-ver2 (a b)
+  "Sort files such that files modified more recently are shown first.
+COMPLETION-A and COMPLETION-B are items in the form of
+\(node-title org-roam-node-struct)"
+  (time-less-p (org-roam-node-file-mtime b)
+               (org-roam-node-file-mtime a)))
+
+(defun dmg-org-roam-node-read--completions-ver2 (&optional filter-fn sort-fn)
+  "Return an alist for node completion.
+The car is the displayed title or alias for the node, and the cdr
+is the `org-roam-node'.
+FILTER-FN is a function to filter out nodes: it takes an `org-roam-node',
+and when nil is returned the node will be filtered out.
+SORT-FN is a function to sort nodes. See `org-roam-node-read-sort-by-file-mtime'
+for an example sort function.
+The displayed title is formatted according to `org-roam-node-display-template'."
+  (let* (
+         (nodes (org-roam-node-list))
+         (nodes (if filter-fn
+                    (cl-remove-if-not
+                     (lambda (n) (funcall filter-fn n))
+                     nodes)
+                  nodes))
+         (nodes (seq-sort 'org-roam-node-read-sort-by-file-mtime-ver2 nodes))
+
+         (nodes (if (functionp dmg-org-roam-node-display-template)
+                    (dmg-org-roam-format-nodes-using-function nodes)
+                   (dmg-org-roam-format-nodes-using-template nodes)))
+         )
+    nodes))
+
+
+#+end_src
+
+#+RESULTS:
+#+begin_example
+dmg-org-roam-node-read--completions-ver2
+#+end_example
+
+#+begin_src emacs-lisp   :exports both
+(setq dmg-org-roam-node-display-template 'dmg-org-roam-format-template)
+
+(cl-loop
+ for i from 1 to 10
+ collect (benchmark-run 1
+            (dmg-org-roam-node-read--completions-ver2)
+           ))
+#+end_src
+
+#+RESULTS:
+|            0.096256 | 0 |                 0.0 |
+|            0.082856 | 0 |                 0.0 |
+|            0.082528 | 0 |                 0.0 |
+|            0.082071 | 0 |                 0.0 |
+|            0.083141 | 0 |                 0.0 |
+| 0.27509700000000004 | 1 | 0.19386300000000034 |
+|            0.083071 | 0 |                 0.0 |
+|            0.085745 | 0 |                 0.0 |
+|            0.084448 | 0 |                 0.0 |
+|             0.08376 | 0 |                 0.0 |
+
+
+** profiling
+
+#+begin_src emacs-lisp   :exports both
+(setq dmg-org-roam-node-display-template 'dmg-org-roam-format-template)
+
+(profiler-start 'cpu)
+(dotimes (i 10)
+ (dmg-org-roam-node-read--completions-ver2)
+ )
+(profiler-stop)
+#+end_src
+
+#+RESULTS:
+#+begin_example
+CPU profiler stopped
+#+end_example
