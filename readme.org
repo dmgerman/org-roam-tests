@@ -1,3 +1,18 @@
+* TOC 
+:TOC:
+
+- [[#formatting-nodes-using-a-provided-function-instead-of-the-default-one][formatting nodes using a provided function instead of the default one]]
+  - [[#this-is-my-function-and-my-template][this is my function and my template]]
+- [[#modified-functions][modified functions.]]
+- [[#testing-the-old-code][Testing the old code]]
+- [[#testing-the-new-function][testing the new function]]
+- [[#replacing-org-roam-node-read-sort-by-file-mtime][replacing org-roam-node-read-sort-by-file-mtime]]
+- [[#benchmarking-original-code][Benchmarking original code]]
+- [[#benchmarking-using-the-function][Benchmarking using the function]]
+- [[#replacing-org-roam-node-read-sort-by-file-mtime-1][replacing org-roam-node-read-sort-by-file-mtime]]
+- [[#moving-the-sort-before-the-formatting][moving the sort before the formatting]]
+  - [[#profiling][profiling]]
+- [[#this-is-how-fast-sort-is][this is how fast sort is]]
 
 * formatting nodes using a provided function instead of the default one
 
