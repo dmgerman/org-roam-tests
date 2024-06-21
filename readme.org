@@ -1,5 +1,5 @@
 
-* using a provided function instead of the provided one
+* formatting nodes using a provided function instead of the default one
 
 ** this is my function and my template
 
