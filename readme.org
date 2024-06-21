@@ -373,3 +373,52 @@ dmg-org-roam-node-read--completions-ver2
 #+begin_example
 CPU profiler stopped
 #+end_example
+
+* this is how fast sort is
+sorting 10^6 random ints
+
+i guess sorting in place is more expensive than generating a list
+
+
+#+begin_src emacs-lisp   :exports both :results output
+;;; -*- lexical-binding: t; -*-
+(require 'dash)
+(require 'seq)
+(require 'cl-lib)
+
+(setq million
+      (mapcar 'random
+      (number-sequence 1 1000000)))
+
+(let ((gc-cons-threshold 999999999)
+      (time) (result))
+  (print "sort\n")
+  (garbage-collect)
+  (setq nmillion million)
+  (setq time (float-time))
+  (setq result (sort nmillion '<))
+  (print (- (float-time) time)))
+
+(let ((gc-cons-threshold 999999999)
+      (time) (result))
+  (print "seq-sort\n")
+  (garbage-collect)
+  (setq nmillion million)
+  (setq time (float-time))
+  (setq result (seq-sort '< nmillion ))
+  (print (- (float-time) time)))
+#+end_src
+
+#+RESULTS:
+#+begin_example
+
+"sort
+"
+
+0.6713299751281738
+
+"seq-sort
+"
+
+0.07315802574157715
+#+end_example
