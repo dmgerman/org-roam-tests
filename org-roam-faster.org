@@ -5,6 +5,8 @@
 - Creating a boa constructor for the node improves significantly the database retrieval
 - Changing the logic. The current logic is very expensive in terms of memory
   resulting in lots of GC
+- note that I do not cache the results of the database query (thus, changes to the DMBS
+  are reflected always in the results)
 
 #+begin_src emacs-lisp   :exports both
 (cl-defstruct (org-roam-node (:constructor org-roam-node-create)
