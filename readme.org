@@ -139,7 +139,7 @@ dmg-org-roam-node-read--completions
 
 * Testing the old code
 
-#+begin_src emacs-lisp
+#+begin_src emacs-lisp :exports both
 (setq dmg-org-roam-node-display-template
             (concat 
 ;              (propertize "${todo:10} " 'face 'org-todo)
@@ -170,7 +170,7 @@ dmg-org-roam-node-read--completions
 * testing the new function
 
 
-#+begin_src emacs-lisp
+#+begin_src emacs-lisp :exports both
 (setq dmg-org-roam-node-display-template 'dmg-org-roam-format-template)
 
 (mapcar (lambda (x)
