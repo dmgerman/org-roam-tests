@@ -115,7 +115,7 @@ org-roam-node-list
 
 * Memoizing org-roam-node-read--to-candidate
 
-This function accounts for a significant amount of time
+This function accounts for a significant amount of time. I reset the cache every night.
 
 
 #+begin_src emacs-lisp   :exports both
