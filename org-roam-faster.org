@@ -1,0 +1,138 @@
+
+* making org-roam-node-list faster
+
+
+- Creating a boa constructor for the node improves significantly the database retrieval
+- Changing the logic. The current logic is very expensive in terms of memory
+  resulting in lots of GC
+
+#+begin_src emacs-lisp   :exports both
+(cl-defstruct (org-roam-node (:constructor org-roam-node-create)
+                             (:constructor org-roam-node-create-from-db
+                                           (title aliases                    ; 2
+                                            id file file-title level todo     ; 5
+                                            point priority scheduled deadline properties ;;5
+                                            olp file-atime file-mtime tags refs)) ;;5
+                             (:copier nil))
+  "A heading or top level file with an assigned ID property."
+  file file-title file-hash file-atime file-mtime ;5 
+  id level point todo priority ; 5
+  scheduled deadline title properties olp ;5
+  tags aliases refs)
+
+(defun org-roam-node-list ()
+  "Return all nodes stored in the database as a list of `org-roam-node's."
+  (let ((rows (org-roam-db-query
+               "SELECT
+  title,
+  aliases,
+
+  id,
+  file,
+  filetitle,
+  \"level\",
+  todo,
+
+  pos,
+  priority ,
+  scheduled ,
+  deadline ,
+  properties ,
+
+  olp,
+  atime,
+  mtime,
+  '(' || group_concat(tags, ' ') || ')' as tags,
+  refs
+FROM
+  (
+  SELECT
+    id,
+    file,
+    filetitle,
+    \"level\",
+    todo,
+    pos,
+    priority ,
+    scheduled ,
+    deadline ,
+    title,
+    properties ,
+    olp,
+    atime,
+    mtime,
+    tags,
+    '(' || group_concat(aliases, ' ') || ')' as aliases,
+    refs
+  FROM
+    (
+    SELECT
+      nodes.id as id,
+      nodes.file as file,
+      nodes.\"level\" as \"level\",
+      nodes.todo as todo,
+      nodes.pos as pos,
+      nodes.priority as priority,
+      nodes.scheduled as scheduled,
+      nodes.deadline as deadline,
+      nodes.title as title,
+      nodes.properties as properties,
+      nodes.olp as olp,
+      files.atime as atime,
+      files.mtime as mtime,
+      files.title as filetitle,
+      tags.tag as tags,
+      aliases.alias as aliases,
+      '(' || group_concat(RTRIM (refs.\"type\", '\"') || ':' || LTRIM(refs.ref, '\"'), ' ') || ')' as refs
+    FROM nodes
+    LEFT JOIN files ON files.file = nodes.file
+    LEFT JOIN tags ON tags.node_id = nodes.id
+    LEFT JOIN aliases ON aliases.node_id = nodes.id
+    LEFT JOIN refs ON refs.node_id = nodes.id
+    GROUP BY nodes.id, tags.tag, aliases.alias )
+  GROUP BY id, tags )
+GROUP BY id
+")))
+   (mapcan
+     (lambda (row)
+       (let (
+              (all-titles (cons (car row) (nth 1 row)))
+              )
+         (mapcar (lambda (temp-title)
+                   (apply 'org-roam-node-create-from-db (cons temp-title (cdr row))))
+                 all-titles)
+       ))
+     rows)
+     ))
+#+end_src
+
+#+RESULTS:
+#+begin_example
+org-roam-node-list
+#+end_example
+
+
+
+* Memoizing org-roam-node-read--to-candidate
+
+This function accounts for a significant amount of time
+
+
+#+begin_src emacs-lisp   :exports both
+(defvar dmg-cache-org-roam-node-read--to-candidate (make-hash-table :test 'equal))
+
+(defun dmg-advice-org-roam-node-read--to-candidate (fn &rest args)
+  (or (gethash args dmg-cache-org-roam-node-read--to-candidate)
+      (puthash args (apply fn args) dmg-cache-org-roam-node-read--to-candidate)))
+
+(advice-add 'org-roam-node-read--to-candidate :around #'dmg-advice-org-roam-node-read--to-candidate)
+
+(defun dmg-org-roam-node-cache-reset ()
+  "reset the cache for roam nodes"
+  (interactive)
+  (setq dmg-cache/org-roam-node-read--to-candidate (make-hash-table :test 'equal))
+ )
+;;(advice-remove 'org-roam-node-read--to-candidate #'dmg-advice/org-roam-node-read--to-candidate)
+
+#+end_src
+
