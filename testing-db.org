@@ -1,0 +1,331 @@
+* Rewriting the query
+
+This query is  more readable I feel
+
+
+#+begin_src emacs-lisp   :exports both
+(setq test-query-new
+      "
+with trefs as 
+  (select
+     node_id as id,
+      '(' || group_concat(RTRIM (refs.\"type\", '\"') || ':' || LTRIM(refs.ref, '\"'), ' ') || ')' as refs
+      from refs
+      group by node_id),
+   ttags as
+   (select
+     node_id as id,
+       '(' || group_concat(tag, ' ') || ')' as tags
+      from tags
+      group by node_id),
+   taliases as
+   (select
+     node_id as id,
+        '(' || group_concat(alias, ' ') || ')' as aliases
+      from aliases
+      group by node_id)
+select
+  id,
+  files.file,
+  files.title as filetitle,
+  \"level\",
+  todo,
+  pos,
+  priority ,
+  scheduled ,
+  deadline ,
+  nodes.title as title,
+  properties ,
+  olp,
+  atime,
+  mtime,
+  tags,
+  aliases,
+  refs
+   from
+     nodes
+      left join files using (file)
+      left join taliases using (id)
+      left join trefs using (id)
+      left join ttags using (id)
+"
+)
+
+(cl-loop
+ for i from 1 to 10
+ collect (benchmark-run 10
+           (org-roam-db-query test-query-new)
+           ))
+
+#+end_src
+
+#+RESULTS:
+| 0.28089800000000004 | 0 |                 0.0 |
+|             0.55047 | 1 | 0.28645899999997937 |
+|  0.5568839999999999 | 1 |  0.2901329999999973 |
+|            0.548108 | 1 | 0.28691200000000094 |
+|             0.25957 | 0 |                 0.0 |
+|  0.5512619999999999 | 1 | 0.28741999999999734 |
+|            0.550496 | 1 |  0.2883860000000027 |
+|            0.550735 | 1 |  0.2895420000000115 |
+|            0.262278 | 0 |                 0.0 |
+|            0.547269 | 1 |  0.2865359999999839 |
+
+* This is without the WITH
+
+which one is faster?
+
+#+begin_src emacs-lisp   :exports both
+(setq test-query-new
+      "
+select
+  id,
+  files.file,
+  files.title as filetitle,
+  \"level\",
+  todo,
+  pos,
+  priority ,
+  scheduled ,
+  deadline ,
+  nodes.title as title,
+  properties ,
+  olp,
+  atime,
+  mtime,
+  tags,
+  aliases,
+  refs
+   from
+     nodes
+      left join files
+            using (file)
+      left join  (
+                   select
+                      node_id as id,
+                     '(' || group_concat(alias, ' ') || ')' as aliases
+                   from aliases
+                   group by node_id)
+            using (id)
+      left join   (select
+                    node_id as id,
+                   '(' || group_concat(RTRIM (refs.\"type\", '\"') || ':' || LTRIM(refs.ref, '\"'), ' ') || ')' as refs
+                   from refs
+                   group by node_id)
+            using (id)
+      left join    (select
+                       node_id as id,
+                      '(' || group_concat(tag, ' ') || ')' as tags
+                    from tags
+                    group by node_id)
+            using (id)
+"
+)
+
+(cl-loop
+ for i from 1 to 10
+ collect (benchmark-run 10
+           (org-roam-db-query test-query-new)
+           ))
+
+#+end_src
+
+#+RESULTS:
+|            0.288021 | 0 |                 0.0 |
+|  0.5473370000000001 | 1 | 0.28830100000001835 |
+|            0.560618 | 1 |  0.2984960000000001 |
+|            0.260023 | 0 |                 0.0 |
+|            0.551944 | 1 | 0.29241799999999785 |
+|  0.5530600000000001 | 1 | 0.29142699999999877 |
+|            0.549781 | 1 |   0.290536000000003 |
+| 0.25985100000000005 | 0 |                 0.0 |
+|            0.545442 | 1 |  0.2884899999999959 |
+|  0.5471199999999999 | 1 |  0.2880209999999863 |
+
+
+
+* This is the original query
+
+
+#+begin_src emacs-lisp   :exports both
+(setq test-query-original
+      "SELECT
+  id,
+  file,
+  filetitle,
+  \"level\",
+  todo,
+  pos,
+  priority ,
+  scheduled ,
+  deadline ,
+  title,
+  properties ,
+  olp,
+  atime,
+  mtime,
+  '(' || group_concat(tags, ' ') || ')' as tags,
+  aliases,
+  refs
+FROM
+  (
+  SELECT
+    id,
+    file,
+    filetitle,
+    \"level\",
+    todo,
+    pos,
+    priority ,
+    scheduled ,
+    deadline ,
+    title,
+    properties ,
+    olp,
+    atime,
+    mtime,
+    tags,
+    '(' || group_concat(aliases, ' ') || ')' as aliases,
+    refs
+  FROM
+    (
+    SELECT
+      nodes.id as id,
+      nodes.file as file,
+      nodes.\"level\" as \"level\",
+      nodes.todo as todo,
+      nodes.pos as pos,
+      nodes.priority as priority,
+      nodes.scheduled as scheduled,
+      nodes.deadline as deadline,
+      nodes.title as title,
+      nodes.properties as properties,
+      nodes.olp as olp,
+      files.atime as atime,
+      files.mtime as mtime,
+      files.title as filetitle,
+      tags.tag as tags,
+      aliases.alias as aliases,
+      '(' || group_concat(RTRIM (refs.\"type\", '\"') || ':' || LTRIM(refs.ref, '\"'), ' ') || ')' as refs
+    FROM nodes
+    LEFT JOIN files ON files.file = nodes.file
+    LEFT JOIN tags ON tags.node_id = nodes.id
+    LEFT JOIN aliases ON aliases.node_id = nodes.id
+    LEFT JOIN refs ON refs.node_id = nodes.id
+    GROUP BY nodes.id, tags.tag, aliases.alias )
+  GROUP BY id, tags )
+GROUP BY id")
+
+(cl-loop
+ for i from 1 to 10
+ collect (benchmark-run 10
+           (org-roam-db-query test-query-original)
+           ))
+#+end_src
+
+#+RESULTS:
+| 0.29516000000000003 | 0 |                 0.0 |
+|  0.5844330000000001 | 1 | 0.28543600000000424 |
+|             0.58272 | 1 | 0.28748899999999367 |
+|            0.585402 | 1 |  0.2870280000000207 |
+|             0.29757 | 0 |                 0.0 |
+|             0.58387 | 1 |  0.2880209999999863 |
+|            0.581697 | 1 |  0.2858919999999898 |
+|            0.587078 | 1 | 0.28830500000000825 |
+|            0.293628 | 0 |                 0.0 |
+|            0.584333 | 1 |  0.2886570000000006 |
+
+
+
+* This is the original query with an order by
+
+
+#+begin_src emacs-lisp   :exports both
+(setq test-query-original
+      "SELECT
+  id,
+  file,
+  filetitle,
+  \"level\",
+  todo,
+  pos,
+  priority ,
+  scheduled ,
+  deadline ,
+  title,
+  properties ,
+  olp,
+  atime,
+  mtime,
+  '(' || group_concat(tags, ' ') || ')' as tags,
+  aliases,
+  refs
+FROM
+  (
+  SELECT
+    id,
+    file,
+    filetitle,
+    \"level\",
+    todo,
+    pos,
+    priority ,
+    scheduled ,
+    deadline ,
+    title,
+    properties ,
+    olp,
+    atime,
+    mtime,
+    tags,
+    '(' || group_concat(aliases, ' ') || ')' as aliases,
+    refs
+  FROM
+    (
+    SELECT
+      nodes.id as id,
+      nodes.file as file,
+      nodes.\"level\" as \"level\",
+      nodes.todo as todo,
+      nodes.pos as pos,
+      nodes.priority as priority,
+      nodes.scheduled as scheduled,
+      nodes.deadline as deadline,
+      nodes.title as title,
+      nodes.properties as properties,
+      nodes.olp as olp,
+      files.atime as atime,
+      files.mtime as mtime,
+      files.title as filetitle,
+      tags.tag as tags,
+      aliases.alias as aliases,
+      '(' || group_concat(RTRIM (refs.\"type\", '\"') || ':' || LTRIM(refs.ref, '\"'), ' ') || ')' as refs
+    FROM nodes
+    LEFT JOIN files ON files.file = nodes.file
+    LEFT JOIN tags ON tags.node_id = nodes.id
+    LEFT JOIN aliases ON aliases.node_id = nodes.id
+    LEFT JOIN refs ON refs.node_id = nodes.id
+    GROUP BY nodes.id, tags.tag, aliases.alias )
+  GROUP BY id, tags )
+GROUP BY id
+order by mtime desc
+")
+
+(cl-loop
+ for i from 1 to 10
+ collect (benchmark-run 10
+           (org-roam-db-query test-query-original)
+           ))
+#+end_src
+
+#+RESULTS:
+|              0.3265 | 0 |                 0.0 |
+|  0.5888089999999999 | 1 |  0.2907519999999977 |
+|  0.5955710000000001 | 1 |  0.2939709999999991 |
+|            0.302702 | 0 |                 0.0 |
+|            0.587927 | 1 |   0.290251000000012 |
+|            0.586581 | 1 |  0.2890779999999893 |
+|            0.586656 | 1 |  0.2884070000000065 |
+| 0.29659800000000003 | 0 |                 0.0 |
+|            0.596752 | 1 | 0.29040200000000027 |
+|  0.5866800000000001 | 1 | 0.28819500000000176 |
